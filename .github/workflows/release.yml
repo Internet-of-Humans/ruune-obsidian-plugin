@@ -45,11 +45,19 @@ jobs:
             exit 1
           fi
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "${GITHUB_REF_NAME}" \
-            --generate-notes \
-            manifest.json main.js versions.json
+          # Idempotent: create the release on first run, or refresh its assets
+          # if the tag was re-pushed (so re-tagging never fails the workflow).
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} exists — updating assets."
+            gh release upload "${GITHUB_REF_NAME}" \
+              manifest.json main.js versions.json --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes \
+              manifest.json main.js versions.json
+          fi
