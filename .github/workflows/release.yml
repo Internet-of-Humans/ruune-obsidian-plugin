@@ -1,11 +1,17 @@
 # Cuts an Obsidian-compatible GitHub Release when you push a bare version tag.
 #
-# Obsidian's community store + BRAT require the release tag to EXACTLY match the
-# `version` in manifest.json (e.g. 0.1.0 — no leading "v"), with manifest.json,
-# main.js, and versions.json attached as individual assets.
+# Obsidian's directory + BRAT require the release tag to EXACTLY match the
+# `version` in manifest.json (e.g. 0.1.0 — no leading "v"), with manifest.json
+# and main.js attached as individual assets. Obsidian only downloads those two
+# (plus styles.css if present); versions.json is read from the repo, so we do
+# NOT attach it to the release (the directory scan flags extra assets).
+#
+# We also attach a build provenance attestation for main.js so users can
+# cryptographically verify it was built from this repo (improves the safety
+# scorecard).
 #
 # Usage:
-#   npm version patch|minor|major   # bumps package.json + manifest + versions.json (see scripts/version-bump)
+#   npm version patch|minor|major   # bumps package.json + manifest + versions.json
 #   git push && git push --tags
 name: Release Obsidian plugin
 
@@ -17,6 +23,9 @@ on:
 
 permissions:
   contents: write
+  # Required to generate build provenance attestations for the release asset.
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -45,19 +54,26 @@ jobs:
             exit 1
           fi
 
+      - name: Attest build provenance for main.js
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: main.js
+
       - name: Create or update GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Idempotent: create the release on first run, or refresh its assets
           # if the tag was re-pushed (so re-tagging never fails the workflow).
+          # Only manifest.json + main.js are attached — Obsidian ignores anything
+          # else, and the directory scan flags extra release files.
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             echo "Release ${GITHUB_REF_NAME} exists — updating assets."
             gh release upload "${GITHUB_REF_NAME}" \
-              manifest.json main.js versions.json --clobber
+              manifest.json main.js --clobber
           else
             gh release create "${GITHUB_REF_NAME}" \
               --title "${GITHUB_REF_NAME}" \
               --generate-notes \
-              manifest.json main.js versions.json
+              manifest.json main.js
           fi
