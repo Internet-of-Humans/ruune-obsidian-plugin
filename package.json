@@ -1,6 +1,6 @@
 {
   "name": "ruune-sync",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Sync your Ruune notes into your Obsidian vault.",
   "main": "main.js",
   "scripts": {
@@ -14,7 +14,6 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "builtin-modules": "^3.3.0",
     "esbuild": "^0.20.0",
     "obsidian": "latest",
     "typescript": "^5.4.0"

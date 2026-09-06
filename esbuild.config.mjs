@@ -1,6 +1,10 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
+import { builtinModules } from "module";
+
+// Node's builtin module names, plus their `node:`-prefixed forms, so esbuild
+// treats them all as external (replaces the `builtin-modules` package).
+const builtins = [...builtinModules, ...builtinModules.map((m) => `node:${m}`)];
 
 const production = process.argv[2] === "production";
 

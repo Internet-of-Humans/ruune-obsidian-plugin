@@ -71,7 +71,7 @@ export class RuuneSyncSettingTab extends PluginSettingTab {
       )
       .addText((text) => {
         text.inputEl.type = "password";
-        text.inputEl.style.width = "100%";
+        text.inputEl.addClass("ruune-token-input");
         text
           .setPlaceholder("ruune_obs_...")
           .setValue(this.plugin.settings.token)
@@ -87,15 +87,16 @@ export class RuuneSyncSettingTab extends PluginSettingTab {
         "Advanced — leave as the default (obsidian.ruune.ai) unless you're " +
           "on self-hosted or staging Ruune.",
       )
-      .addText((text) =>
+      .addText((text) => {
+        text.inputEl.addClass("ruune-serverurl-input");
         text
           .setPlaceholder(DEFAULT_SETTINGS.baseUrl)
           .setValue(this.plugin.settings.baseUrl)
           .onChange(async (value) => {
             this.plugin.settings.baseUrl = value.trim() || DEFAULT_SETTINGS.baseUrl;
             await this.plugin.saveSettings();
-          }),
-      );
+          });
+      });
 
     new Setting(containerEl)
       .setName("Test connection")
@@ -229,7 +230,7 @@ export class RuuneSyncSettingTab extends PluginSettingTab {
       )
       .addButton((btn) =>
         btn
-          .setWarning()
+          .setDestructive()
           .setButtonText("Reset")
           .onClick(async () => {
             this.plugin.settings.lastSyncCursor = null;

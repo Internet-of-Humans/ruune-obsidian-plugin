@@ -1,0 +1,5 @@
+/* Full-width text inputs in the Ruune Sync settings tab (token + server URL). */
+.ruune-token-input,
+.ruune-serverurl-input {
+  width: 100%;
+}

@@ -1,10 +1,10 @@
 # Cuts an Obsidian-compatible GitHub Release when you push a bare version tag.
 #
 # Obsidian's directory + BRAT require the release tag to EXACTLY match the
-# `version` in manifest.json (e.g. 0.1.0 — no leading "v"), with manifest.json
-# and main.js attached as individual assets. Obsidian only downloads those two
-# (plus styles.css if present); versions.json is read from the repo, so we do
-# NOT attach it to the release (the directory scan flags extra assets).
+# `version` in manifest.json (e.g. 0.1.0 — no leading "v"), with manifest.json,
+# main.js, and styles.css attached as individual assets. Obsidian only downloads
+# those three; versions.json is read from the repo, so we do NOT attach it to
+# the release (the directory scan flags extra assets).
 #
 # We also attach a build provenance attestation for main.js so users can
 # cryptographically verify it was built from this repo (improves the safety
@@ -70,10 +70,10 @@ jobs:
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             echo "Release ${GITHUB_REF_NAME} exists — updating assets."
             gh release upload "${GITHUB_REF_NAME}" \
-              manifest.json main.js --clobber
+              manifest.json main.js styles.css --clobber
           else
             gh release create "${GITHUB_REF_NAME}" \
               --title "${GITHUB_REF_NAME}" \
               --generate-notes \
-              manifest.json main.js
+              manifest.json main.js styles.css
           fi

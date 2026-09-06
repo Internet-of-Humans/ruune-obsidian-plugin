@@ -28,19 +28,26 @@ export default class RuuneSyncPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "ruune-sync-now",
+      id: "sync-now",
       name: "Sync now",
       callback: () => void this.runSync("manual"),
     });
 
     this.addCommand({
-      id: "ruune-open-settings",
+      id: "open-settings",
       name: "Open settings",
       callback: () => {
-        // @ts-expect-error — setting is available at runtime.
-        this.app.setting.open();
-        // @ts-expect-error — openTabById is available at runtime.
-        this.app.setting.openTabById(this.manifest.id);
+        // `setting` isn't in the public typings but is available at runtime.
+        const setting = (
+          this.app as unknown as {
+            setting: {
+              open: () => void;
+              openTabById: (id: string) => void;
+            };
+          }
+        ).setting;
+        setting.open();
+        setting.openTabById(this.manifest.id);
       },
     });
 
@@ -88,7 +95,9 @@ export default class RuuneSyncPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    // loadData() is typed as `any`; treat it as a partial settings object.
+    const saved = ((await this.loadData()) ?? {}) as Partial<RuuneSyncSettings>;
+    this.settings = { ...DEFAULT_SETTINGS, ...saved };
     // fileIndex must be an object even if older data had it missing/null.
     if (!this.settings.fileIndex || typeof this.settings.fileIndex !== "object") {
       this.settings.fileIndex = {};
