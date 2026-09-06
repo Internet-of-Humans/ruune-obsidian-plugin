@@ -1,0 +1,10 @@
+{
+  "id": "ruune-sync",
+  "name": "Ruune Sync",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Automatically sync your Ruune notes, summaries, and transcripts into your Obsidian vault.",
+  "author": "Ruune",
+  "authorUrl": "https://ruune.ai",
+  "isDesktopOnly": false
+}

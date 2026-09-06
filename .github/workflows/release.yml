@@ -1,0 +1,55 @@
+# Cuts an Obsidian-compatible GitHub Release when you push a bare version tag.
+#
+# Obsidian's community store + BRAT require the release tag to EXACTLY match the
+# `version` in manifest.json (e.g. 0.1.0 — no leading "v"), with manifest.json,
+# main.js, and versions.json attached as individual assets.
+#
+# Usage:
+#   npm version patch|minor|major   # bumps package.json + manifest + versions.json (see scripts/version-bump)
+#   git push && git push --tags
+name: Release Obsidian plugin
+
+on:
+  push:
+    tags:
+      # Bare semver only (0.1.0), so it matches manifest.json exactly.
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify tag matches manifest version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          MANIFEST_VERSION="$(node -p "require('./manifest.json').version")"
+          if [ "$TAG" != "$MANIFEST_VERSION" ]; then
+            echo "::error::Tag '$TAG' does not match manifest.json version '$MANIFEST_VERSION'."
+            echo "Obsidian requires the release tag to equal the manifest version exactly."
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            manifest.json main.js versions.json
