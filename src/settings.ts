@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, type SettingDefinitionItem } from "obsidian";
 import type RuuneSyncPlugin from "./main";
 import { RuuneApi } from "./api";
 
@@ -51,195 +51,212 @@ export const DEFAULT_SETTINGS: RuuneSyncSettings = {
   fileIndex: {},
 };
 
+const INTERVAL_OPTIONS: Record<string, string> = {
+  "0": "Manual only",
+  "5": "Every 5 minutes",
+  "15": "Every 15 minutes",
+  "30": "Every 30 minutes",
+  "60": "Every hour",
+};
+
 export class RuuneSyncSettingTab extends PluginSettingTab {
-  constructor(app: App, private plugin: RuuneSyncPlugin) {
+  plugin: RuuneSyncPlugin;
+
+  constructor(app: App, plugin: RuuneSyncPlugin) {
     super(app, plugin);
+    this.plugin = plugin;
   }
 
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
+  /**
+   * Dropdowns persist strings; intervalMinutes is a number. Convert on the
+   * way in/out so the stored setting stays numeric.
+   */
+  getControlValue(key: string): unknown {
+    if (key === "intervalMinutes") {
+      return String(this.plugin.settings.intervalMinutes);
+    }
+    return super.getControlValue(key);
+  }
 
-    // ── Connection ──
-    new Setting(containerEl).setName("Connection").setHeading();
+  async setControlValue(key: string, value: unknown): Promise<void> {
+    if (key === "intervalMinutes") {
+      this.plugin.settings.intervalMinutes = Number(value) || 0;
+      await this.plugin.saveSettings();
+      this.plugin.restartAutoSync();
+      return;
+    }
+    if (key === "folderTemplate") {
+      this.plugin.settings.folderTemplate = String(value ?? "").trim();
+      await this.plugin.saveSettings();
+      return;
+    }
+    await super.setControlValue(key, value);
+  }
 
-    new Setting(containerEl)
-      .setName("Plugin token")
-      .setDesc(
-        "Paste the Obsidian plugin token from the Ruune app " +
-          "(Settings → Integrations → Obsidian → Plugin token).",
-      )
-      .addText((text) => {
-        text.inputEl.type = "password";
-        text.inputEl.addClass("ruune-token-input");
-        text
-          .setPlaceholder("ruune_obs_...")
-          .setValue(this.plugin.settings.token)
-          .onChange(async (value) => {
-            this.plugin.settings.token = value.trim();
-            await this.plugin.saveSettings();
-          });
-      });
-
-    new Setting(containerEl)
-      .setName("Server URL")
-      .setDesc(
-        "Advanced — leave as the default (obsidian.ruune.ai) unless you're " +
-          "on self-hosted or staging Ruune.",
-      )
-      .addText((text) => {
-        text.inputEl.addClass("ruune-serverurl-input");
-        text
-          .setPlaceholder(DEFAULT_SETTINGS.baseUrl)
-          .setValue(this.plugin.settings.baseUrl)
-          .onChange(async (value) => {
-            this.plugin.settings.baseUrl = value.trim() || DEFAULT_SETTINGS.baseUrl;
-            await this.plugin.saveSettings();
-          });
-      });
-
-    new Setting(containerEl)
-      .setName("Test connection")
-      .setDesc("Verify your token can reach Ruune.")
-      .addButton((btn) =>
-        btn.setButtonText("Test").onClick(async () => {
-          if (!this.plugin.settings.token) {
-            new Notice("Ruune: add your plugin token first.");
-            return;
-          }
-          btn.setDisabled(true).setButtonText("Testing…");
-          try {
-            const api = new RuuneApi(
-              this.plugin.settings.baseUrl,
-              this.plugin.settings.token,
-            );
-            await api.testConnection();
-            new Notice("Ruune: connection OK ✓");
-          } catch (err) {
-            new Notice(
-              `Ruune: connection failed — ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-            );
-          } finally {
-            btn.setDisabled(false).setButtonText("Test");
-          }
-        }),
-      );
-
-    // ── Output ──
-    new Setting(containerEl).setName("Output").setHeading();
-
-    new Setting(containerEl)
-      .setName("Folder")
-      .setDesc(
-        "Where notes are written. Supports date tokens: {{date}} (YYYY-MM-DD), " +
-          "{{year}}, {{month}}, {{day}}. Example: Journal/{{date}}",
-      )
-      .addText((text) =>
-        text
-          .setPlaceholder("Ruune")
-          .setValue(this.plugin.settings.folderTemplate)
-          .onChange(async (value) => {
-            this.plugin.settings.folderTemplate = value.trim();
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName("Include transcript")
-      .setDesc("Append the full transcript below each note's summary.")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.includeTranscript)
-          .onChange(async (value) => {
-            this.plugin.settings.includeTranscript = value;
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName("Include archived notes")
-      .setDesc("Also sync notes you've archived in Ruune.")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.includeArchived)
-          .onChange(async (value) => {
-            this.plugin.settings.includeArchived = value;
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    // ── Schedule ──
-    new Setting(containerEl).setName("Schedule").setHeading();
-
-    new Setting(containerEl)
-      .setName("Auto-sync interval")
-      .setDesc("How often to check Ruune for new/updated notes.")
-      .addDropdown((dd) => {
-        dd.addOption("0", "Manual only");
-        dd.addOption("5", "Every 5 minutes");
-        dd.addOption("15", "Every 15 minutes");
-        dd.addOption("30", "Every 30 minutes");
-        dd.addOption("60", "Every hour");
-        dd.setValue(String(this.plugin.settings.intervalMinutes));
-        dd.onChange(async (value) => {
-          this.plugin.settings.intervalMinutes = Number(value) || 0;
-          await this.plugin.saveSettings();
-          this.plugin.restartAutoSync();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName("Sync on startup")
-      .setDesc("Run a sync automatically when this vault opens.")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.syncOnStartup)
-          .onChange(async (value) => {
-            this.plugin.settings.syncOnStartup = value;
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    // ── Actions ──
-    new Setting(containerEl).setName("Sync").setHeading();
-
+  getSettingDefinitions(): SettingDefinitionItem[] {
     const lastSync = this.plugin.settings.lastSyncAt
       ? new Date(this.plugin.settings.lastSyncAt).toLocaleString()
       : "never";
 
-    new Setting(containerEl)
-      .setName("Sync now")
-      .setDesc(`Last synced: ${lastSync}`)
-      .addButton((btn) =>
-        btn
-          .setButtonText("Sync now")
-          .setCta()
-          .onClick(async () => {
-            await this.plugin.runSync("manual");
-            this.display();
-          }),
-      );
-
-    new Setting(containerEl)
-      .setName("Reset sync state")
-      .setDesc(
-        "Forget what's been synced so the next sync re-imports every note. " +
-          "Existing files are overwritten, not duplicated.",
-      )
-      .addButton((btn) =>
-        btn
-          // setWarning() (not setDestructive()) keeps compatibility with the
-          // declared minAppVersion; setDestructive() only exists in 1.13.0+.
-          .setWarning()
-          .setButtonText("Reset")
-          .onClick(async () => {
-            this.plugin.settings.lastSyncCursor = null;
-            this.plugin.settings.fileIndex = {};
-            await this.plugin.saveSettings();
-            new Notice("Ruune: sync state reset. Next sync re-imports all notes.");
-          }),
-      );
+    return [
+      {
+        name: "Plugin token",
+        desc:
+          "Paste the plugin token from the Ruune app " +
+          "(Settings → Integrations → Obsidian → Plugin token).",
+        render: (setting) => {
+          setting.addText((text) => {
+            text.inputEl.type = "password";
+            text.inputEl.addClass("ruune-token-input");
+            text
+              .setPlaceholder("ruune_obs_...")
+              .setValue(this.plugin.settings.token)
+              .onChange(async (value) => {
+                this.plugin.settings.token = value.trim();
+                await this.plugin.saveSettings();
+              });
+          });
+        },
+      },
+      {
+        name: "Server URL",
+        desc:
+          "Advanced — leave as the default (obsidian.ruune.ai) unless you're " +
+          "on self-hosted or staging Ruune.",
+        render: (setting) => {
+          setting.addText((text) => {
+            text.inputEl.addClass("ruune-serverurl-input");
+            text
+              .setPlaceholder(DEFAULT_SETTINGS.baseUrl)
+              .setValue(this.plugin.settings.baseUrl)
+              .onChange(async (value) => {
+                this.plugin.settings.baseUrl =
+                  value.trim() || DEFAULT_SETTINGS.baseUrl;
+                await this.plugin.saveSettings();
+              });
+          });
+        },
+      },
+      {
+        name: "Test connection",
+        desc: "Verify your token can reach Ruune.",
+        render: (setting) => {
+          setting.addButton((btn) =>
+            btn.setButtonText("Test").onClick(async () => {
+              if (!this.plugin.settings.token) {
+                new Notice("Ruune: add your plugin token first.");
+                return;
+              }
+              btn.setDisabled(true).setButtonText("Testing…");
+              try {
+                const api = new RuuneApi(
+                  this.plugin.settings.baseUrl,
+                  this.plugin.settings.token,
+                );
+                await api.testConnection();
+                new Notice("Ruune: connection OK ✓");
+              } catch (err) {
+                new Notice(
+                  `Ruune: connection failed — ${
+                    err instanceof Error ? err.message : String(err)
+                  }`,
+                );
+              } finally {
+                btn.setDisabled(false).setButtonText("Test");
+              }
+            }),
+          );
+        },
+      },
+      {
+        type: "group",
+        heading: "Output",
+        items: [
+          {
+            name: "Folder",
+            desc:
+              "Where notes are written. Supports date tokens: {{date}} (YYYY-MM-DD), " +
+              "{{year}}, {{month}}, {{day}}. Example: Journal/{{date}}",
+            control: {
+              type: "text",
+              key: "folderTemplate",
+              placeholder: "Ruune",
+            },
+          },
+          {
+            name: "Include transcript",
+            desc: "Append the full transcript below each note's summary.",
+            control: { type: "toggle", key: "includeTranscript" },
+          },
+          {
+            name: "Include archived notes",
+            desc: "Also sync notes you've archived in Ruune.",
+            control: { type: "toggle", key: "includeArchived" },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "Schedule",
+        items: [
+          {
+            name: "Auto-sync interval",
+            desc: "How often to check Ruune for new/updated notes.",
+            control: {
+              type: "dropdown",
+              key: "intervalMinutes",
+              options: INTERVAL_OPTIONS,
+            },
+          },
+          {
+            name: "Sync on startup",
+            desc: "Run a sync automatically when this vault opens.",
+            control: { type: "toggle", key: "syncOnStartup" },
+          },
+        ],
+      },
+      {
+        type: "group",
+        heading: "Sync",
+        items: [
+          {
+            name: "Sync now",
+            desc: `Last synced: ${lastSync}`,
+            render: (setting) => {
+              setting.addButton((btn) =>
+                btn
+                  .setButtonText("Sync now")
+                  .setCta()
+                  .onClick(async () => {
+                    await this.plugin.runSync("manual");
+                    this.update();
+                  }),
+              );
+            },
+          },
+          {
+            name: "Reset sync state",
+            desc:
+              "Forget what's been synced so the next sync re-imports every note. " +
+              "Existing files are overwritten, not duplicated.",
+            render: (setting) => {
+              setting.addButton((btn) =>
+                btn
+                  .setDestructive()
+                  .setButtonText("Reset")
+                  .onClick(async () => {
+                    this.plugin.settings.lastSyncCursor = null;
+                    this.plugin.settings.fileIndex = {};
+                    await this.plugin.saveSettings();
+                    new Notice(
+                      "Ruune: sync state reset. Next sync re-imports all notes.",
+                    );
+                  }),
+              );
+            },
+          },
+        ],
+      },
+    ];
   }
 }

@@ -6,9 +6,9 @@
 # those three; versions.json is read from the repo, so we do NOT attach it to
 # the release (the directory scan flags extra assets).
 #
-# We also attach a build provenance attestation for main.js so users can
-# cryptographically verify it was built from this repo (improves the safety
-# scorecard).
+# We also attach a build provenance attestation for main.js and styles.css so
+# users can cryptographically verify they were built from this repo (improves
+# the safety scorecard).
 #
 # Usage:
 #   npm version patch|minor|major   # bumps package.json + manifest + versions.json
@@ -54,10 +54,12 @@ jobs:
             exit 1
           fi
 
-      - name: Attest build provenance for main.js
+      - name: Attest build provenance for release assets
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: main.js
+          subject-path: |
+            main.js
+            styles.css
 
       - name: Create or update GitHub Release
         env:
@@ -65,8 +67,8 @@ jobs:
         run: |
           # Idempotent: create the release on first run, or refresh its assets
           # if the tag was re-pushed (so re-tagging never fails the workflow).
-          # Only manifest.json + main.js are attached — Obsidian ignores anything
-          # else, and the directory scan flags extra release files.
+          # Only manifest.json + main.js + styles.css are attached — Obsidian
+          # ignores anything else, and the directory scan flags extra files.
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             echo "Release ${GITHUB_REF_NAME} exists — updating assets."
             gh release upload "${GITHUB_REF_NAME}" \
