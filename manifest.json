@@ -1,7 +1,7 @@
 {
   "id": "ruune-sync",
   "name": "Ruune Sync",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "minAppVersion": "1.13.0",
   "description": "Automatically sync your Ruune notes, summaries, and transcripts into your vault.",
   "author": "Ruune",

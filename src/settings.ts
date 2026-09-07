@@ -41,7 +41,7 @@ export const DEFAULT_SETTINGS: RuuneSyncSettings = {
   // Override for self-host / staging with a raw functions base.
   baseUrl: "https://obsidian.ruune.ai",
   token: "",
-  folderTemplate: "Ruune",
+  folderTemplate: "Ruune/{{date}}",
   includeTranscript: false,
   includeArchived: false,
   intervalMinutes: 15,
@@ -180,7 +180,7 @@ export class RuuneSyncSettingTab extends PluginSettingTab {
             control: {
               type: "text",
               key: "folderTemplate",
-              placeholder: "Ruune",
+              placeholder: "Ruune/{{date}}",
             },
           },
           {

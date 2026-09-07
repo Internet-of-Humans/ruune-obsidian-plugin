@@ -1,6 +1,6 @@
 {
   "name": "ruune-sync",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Sync your Ruune notes into your Obsidian vault.",
   "main": "main.js",
   "scripts": {
