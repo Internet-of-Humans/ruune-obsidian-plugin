@@ -230,7 +230,9 @@ export class RuuneSyncSettingTab extends PluginSettingTab {
       )
       .addButton((btn) =>
         btn
-          .setDestructive()
+          // setWarning() (not setDestructive()) keeps compatibility with the
+          // declared minAppVersion; setDestructive() only exists in 1.13.0+.
+          .setWarning()
           .setButtonText("Reset")
           .onClick(async () => {
             this.plugin.settings.lastSyncCursor = null;
