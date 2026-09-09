@@ -209,8 +209,10 @@ function sanitizeFolderSegment(seg: string): string {
 
 /**
  * Resolve a folder template locally (fallback for when the server didn't).
- * Supports {{date}} (YYYY-MM-DD), {{year}}, {{month}}, {{day}} against the
- * note's recording/creation date.
+ * Must stay in lockstep with ruune-server `resolveFolderTemplate`:
+ *   {{date}} (YYYY-MM-DD), {{date:FORMAT}}, {{year}}, {{month}}, {{day}}.
+ * Whitespace inside `{{ … }}` (including a wrapped settings field) is ignored.
+ * Dates use UTC so this matches the server path the plugin prefers.
  */
 export function resolveFolderTemplate(
   template: string,
@@ -221,16 +223,28 @@ export function resolveFolderTemplate(
 
   const d = isoDate ? new Date(isoDate) : new Date();
   const valid = !Number.isNaN(d.getTime());
-  const yyyy = valid ? String(d.getFullYear()) : "";
-  const mm = valid ? String(d.getMonth() + 1).padStart(2, "0") : "";
-  const dd = valid ? String(d.getDate()).padStart(2, "0") : "";
-  const date = valid ? `${yyyy}-${mm}-${dd}` : "";
+  const when = valid ? d : new Date();
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const tokens: Record<string, string> = {
+    YYYY: String(when.getUTCFullYear()),
+    YY: String(when.getUTCFullYear()).slice(-2),
+    MM: pad(when.getUTCMonth() + 1),
+    DD: pad(when.getUTCDate()),
+    HH: pad(when.getUTCHours()),
+    mm: pad(when.getUTCMinutes()),
+  };
+  const formatDate = (pattern: string) =>
+    pattern.replace(/YYYY|YY|MM|DD|HH|mm/g, (t) => tokens[t] ?? t);
 
   const resolved = tpl
-    .replace(/\{\{\s*date\s*\}\}/gi, date)
-    .replace(/\{\{\s*year\s*\}\}/gi, yyyy)
-    .replace(/\{\{\s*month\s*\}\}/gi, mm)
-    .replace(/\{\{\s*day\s*\}\}/gi, dd);
+    .replace(
+      /\{\{\s*date(?::([^}]+))?\s*\}\}/gi,
+      (_m, fmt: string | undefined) => formatDate((fmt ?? "YYYY-MM-DD").trim()),
+    )
+    .replace(/\{\{\s*year\s*\}\}/gi, formatDate("YYYY"))
+    .replace(/\{\{\s*month\s*\}\}/gi, formatDate("MM"))
+    .replace(/\{\{\s*day\s*\}\}/gi, formatDate("DD"));
 
   return resolved
     .split("/")

@@ -176,7 +176,8 @@ export class RuuneSyncSettingTab extends PluginSettingTab {
             name: "Folder",
             desc:
               "Where notes are written. Supports date tokens: {{date}} (YYYY-MM-DD), " +
-              "{{year}}, {{month}}, {{day}}. Example: Journal/{{date}}",
+              "{{year}}, {{month}}, {{day}}, or {{date:YYYY/MM}}. Example: " +
+              "Journal/{{year}}/{{month}}",
             control: {
               type: "text",
               key: "folderTemplate",

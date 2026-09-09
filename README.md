@@ -75,8 +75,10 @@ subfolders plus date tokens resolved against each note's recording date:
 Examples:
 
 - `Ruune/{{date}}` (default) → `Ruune/2026-09-05/` (daily-note style).
-- `Ruune` → all notes in a `Ruune/` folder.
+- `_calendar/daily/{{year}}/{{year}}-{{month}}/{{year}}-{{month}}-{{day}}/meetings`
+  → `_calendar/daily/2026/2026-09/2026-09-05/meetings`.
 - `Notes/{{year}}/{{month}}` → `Notes/2026/09/`.
+- `Notes/{{date:YYYY/MM}}` → same as above (`{{date:FORMAT}}` uses `YYYY`/`MM`/`DD`).
 
 Leave it empty to write to the vault root.
 
