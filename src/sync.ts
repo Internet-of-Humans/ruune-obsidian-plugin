@@ -68,13 +68,15 @@ export class SyncEngine {
         const notes = page.data ?? [];
         if (notes.length === 0) break;
 
+        // Incremental list is cheap; only export when there is work to do.
         const res = await this.importBatch(api, notes);
         imported += res.imported;
         failed += res.failed;
         skipped += res.skipped;
 
         // Advance & persist the watermark after each page so an interrupted
-        // sync resumes instead of restarting.
+        // sync resumes instead of restarting. Always save on the first page
+        // too (empty lastSyncCursor), so later runs stay incremental.
         const next = page.meta?.next_updated_since ?? null;
         if (!next || next === cursor) break;
         cursor = next;

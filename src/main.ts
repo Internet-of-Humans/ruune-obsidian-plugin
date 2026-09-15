@@ -34,6 +34,12 @@ export default class RuuneSyncPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "resync-all",
+      name: "Resync all",
+      callback: () => void this.resyncAll(),
+    });
+
+    this.addCommand({
       id: "open-settings",
       name: "Open settings",
       callback: () => {
@@ -85,6 +91,13 @@ export default class RuuneSyncPlugin extends Plugin {
     await this.engine.run(trigger);
   }
 
+  /** Clear the incremental watermark and walk every note from the beginning. */
+  async resyncAll(): Promise<void> {
+    this.settings.lastSyncCursor = null;
+    await this.saveSettings();
+    await this.runSync("manual");
+  }
+
   setStatus(text: string): void {
     this.statusBar?.setText(text);
   }
@@ -119,7 +132,7 @@ export default class RuuneSyncPlugin extends Plugin {
       this.settings.fileIndex = {};
     }
     if (typeof this.settings.keepInSyncFolder !== "boolean") {
-      this.settings.keepInSyncFolder = true;
+      this.settings.keepInSyncFolder = false;
     }
   }
 
