@@ -1,4 +1,4 @@
-import { Plugin } from "obsidian";
+import { Plugin, TFile } from "obsidian";
 import {
   DEFAULT_SETTINGS,
   RuuneSyncSettingTab,
@@ -51,6 +51,22 @@ export default class RuuneSyncPlugin extends Plugin {
       },
     });
 
+    this.registerEvent(
+      this.app.vault.on("rename", (file, oldPath) => {
+        if (!(file instanceof TFile)) return;
+        const index = this.settings.fileIndex;
+        let changed = false;
+        for (const [noteId, path] of Object.entries(index)) {
+          if (path === oldPath) {
+            index[noteId] = file.path;
+            changed = true;
+            break;
+          }
+        }
+        if (changed) void this.saveSettings();
+      }),
+    );
+
     // Defer startup work until the workspace (and vault index) is ready.
     this.app.workspace.onLayoutReady(() => {
       this.restartAutoSync();
@@ -101,6 +117,9 @@ export default class RuuneSyncPlugin extends Plugin {
     // fileIndex must be an object even if older data had it missing/null.
     if (!this.settings.fileIndex || typeof this.settings.fileIndex !== "object") {
       this.settings.fileIndex = {};
+    }
+    if (typeof this.settings.keepInSyncFolder !== "boolean") {
+      this.settings.keepInSyncFolder = true;
     }
   }
 

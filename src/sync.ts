@@ -8,8 +8,11 @@ export type SyncTrigger = "manual" | "startup" | "interval";
 export interface SyncOutcome {
   imported: number;
   failed: number;
+  skipped: number;
   upToDate: boolean;
 }
+
+type WriteResult = "written" | "skipped";
 
 /**
  * Pull-only sync engine.
@@ -50,6 +53,7 @@ export class SyncEngine {
 
     let imported = 0;
     let failed = 0;
+    let skipped = 0;
     let cursor = s.lastSyncCursor;
 
     try {
@@ -67,6 +71,7 @@ export class SyncEngine {
         const res = await this.importBatch(api, notes);
         imported += res.imported;
         failed += res.failed;
+        skipped += res.skipped;
 
         // Advance & persist the watermark after each page so an interrupted
         // sync resumes instead of restarting.
@@ -82,19 +87,23 @@ export class SyncEngine {
       s.lastSyncAt = new Date().toISOString();
       await this.plugin.saveSettings();
 
-      const upToDate = imported === 0 && failed === 0;
-      if (trigger === "manual" || imported > 0 || failed > 0) {
-        new Notice(this.summaryMessage(imported, failed, upToDate));
+      const upToDate = imported === 0 && failed === 0 && skipped === 0;
+      if (trigger === "manual" || imported > 0 || failed > 0 || skipped > 0) {
+        new Notice(this.summaryMessage(imported, failed, skipped, upToDate));
       }
       this.plugin.setStatus(
-        imported > 0 ? `Ruune: synced ${imported}` : "Ruune: up to date",
+        imported > 0
+          ? `Ruune: synced ${imported}`
+          : skipped > 0
+            ? `Ruune: skipped ${skipped}`
+            : "Ruune: up to date",
       );
-      return { imported, failed, upToDate };
+      return { imported, failed, skipped, upToDate };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       new Notice(`Ruune: sync failed — ${msg}`);
       this.plugin.setStatus("Ruune: sync failed");
-      return { imported, failed, upToDate: false };
+      return { imported, failed, skipped, upToDate: false };
     } finally {
       this.running = false;
     }
@@ -104,7 +113,7 @@ export class SyncEngine {
   private async importBatch(
     api: RuuneApi,
     notes: NoteSummary[],
-  ): Promise<{ imported: number; failed: number }> {
+  ): Promise<{ imported: number; failed: number; skipped: number }> {
     const byId = new Map(notes.map((n) => [n.id, n]));
     const built = await api.exportNotes({
       noteIds: notes.map((n) => n.id),
@@ -114,28 +123,34 @@ export class SyncEngine {
 
     let imported = 0;
     let failed = 0;
+    let skipped = 0;
     for (const result of built.results ?? []) {
       if (result.status !== "success" || typeof result.markdown !== "string") {
         failed++;
         continue;
       }
       try {
-        await this.writeNote(result, byId.get(result.noteId));
-        imported++;
+        const write = await this.writeNote(result, byId.get(result.noteId));
+        if (write === "skipped") skipped++;
+        else imported++;
       } catch (err) {
         console.error("[ruune-sync] write failed", result.noteId, err);
         failed++;
       }
     }
-    return { imported, failed };
+    return { imported, failed, skipped };
   }
 
   /** Write (or overwrite) a single note's file, tracking its path by noteId. */
   private async writeNote(
     result: ExportResult,
     summary: NoteSummary | undefined,
-  ): Promise<void> {
+  ): Promise<WriteResult> {
     const vault = this.plugin.app.vault;
+    const keepInFolder = this.plugin.settings.keepInSyncFolder;
+    const index = this.plugin.settings.fileIndex;
+    const indexed = Object.prototype.hasOwnProperty.call(index, result.noteId);
+    const knownPath = index[result.noteId] ?? "";
 
     // Prefer the server-resolved folder; else resolve our template locally.
     const folder =
@@ -150,40 +165,64 @@ export class SyncEngine {
     )}.md`;
     const desiredPath = normalizePath(folder ? `${folder}/${fileName}` : fileName);
 
-    await ensureFolder(vault, folder);
-
-    // If we've seen this note before, update the existing file even if its
-    // title/folder changed (move + modify), so we never duplicate.
-    const knownPath = this.plugin.settings.fileIndex[result.noteId];
     const existing = knownPath
       ? vault.getAbstractFileByPath(knownPath)
       : null;
 
-    if (existing instanceof TFile) {
-      if (knownPath !== desiredPath) {
-        await ensureFolder(vault, folder);
-        await this.plugin.app.fileManager.renameFile(existing, desiredPath);
+    if (indexed) {
+      if (existing instanceof TFile) {
+        if (keepInFolder && knownPath !== desiredPath) {
+          await ensureFolder(vault, folder);
+          await this.plugin.app.fileManager.renameFile(existing, desiredPath);
+          await vault.modify(existing, result.markdown ?? "");
+          index[result.noteId] = desiredPath;
+        } else {
+          // Leave the file where the user put it.
+          await vault.modify(existing, result.markdown ?? "");
+          if (keepInFolder) index[result.noteId] = desiredPath;
+        }
+        return "written";
       }
-      await vault.modify(existing, result.markdown ?? "");
-      this.plugin.settings.fileIndex[result.noteId] = desiredPath;
-      return;
+
+      // Indexed but the file is gone (moved out of the vault path we know, or
+      // deleted). Recreate only when the user asked us to keep the folder in
+      // lockstep; otherwise remember it as dismissed so we don't retry.
+      if (!keepInFolder) {
+        index[result.noteId] = "";
+        return "skipped";
+      }
     }
 
-    // No tracked file. Reuse a file already at the target path (e.g. a prior
-    // install) instead of creating "Title 1.md".
+    await ensureFolder(vault, folder);
+
+    // New note, or keep-in-folder recreate. Reuse a file already at the
+    // target path (e.g. a prior install) instead of creating "Title 1.md".
     const atPath = vault.getAbstractFileByPath(desiredPath);
     if (atPath instanceof TFile) {
       await vault.modify(atPath, result.markdown ?? "");
     } else {
       await vault.create(desiredPath, result.markdown ?? "");
     }
-    this.plugin.settings.fileIndex[result.noteId] = desiredPath;
+    index[result.noteId] = desiredPath;
+    return "written";
   }
 
-  private summaryMessage(imported: number, failed: number, upToDate: boolean): string {
+  private summaryMessage(
+    imported: number,
+    failed: number,
+    skipped: number,
+    upToDate: boolean,
+  ): string {
     if (upToDate) return "Ruune: already up to date ✓";
     const parts: string[] = [];
-    if (imported > 0) parts.push(`${imported} note${imported === 1 ? "" : "s"} synced`);
+    if (imported > 0) {
+      parts.push(`${imported} note${imported === 1 ? "" : "s"} synced`);
+    }
+    if (skipped > 0) {
+      parts.push(
+        `${skipped} skipped (moved or deleted)`,
+      );
+    }
     if (failed > 0) parts.push(`${failed} failed`);
     return `Ruune: ${parts.join(", ")}`;
   }

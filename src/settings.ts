@@ -26,6 +26,13 @@ export interface RuuneSyncSettings {
   intervalMinutes: number;
   /** Run a sync when the vault opens. */
   syncOnStartup: boolean;
+  /**
+   * When true (default), sync relocates files back into the Folder template
+   * and recreates ones you moved or deleted. When false, already-synced notes
+   * are updated in place (or skipped if the file is gone); new notes still
+   * land in the Folder template.
+   */
+  keepInSyncFolder: boolean;
 
   // ── Sync state (managed by the engine, not the user) ──
   /** Keyset watermark: max updated_at we've imported. */
@@ -46,6 +53,7 @@ export const DEFAULT_SETTINGS: RuuneSyncSettings = {
   includeArchived: false,
   intervalMinutes: 15,
   syncOnStartup: true,
+  keepInSyncFolder: true,
   lastSyncCursor: null,
   lastSyncAt: null,
   fileIndex: {},
@@ -193,6 +201,12 @@ export class RuuneSyncSettingTab extends PluginSettingTab {
             name: "Include archived notes",
             desc: "Also sync notes you've archived in Ruune.",
             control: { type: "toggle", key: "includeArchived" },
+          },
+          {
+            name: "Keep files in the sync folder",
+            desc:
+              "When off, notes you move or delete are not put back. New notes still sync.",
+            control: { type: "toggle", key: "keepInSyncFolder" },
           },
         ],
       },

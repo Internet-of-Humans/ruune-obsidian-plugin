@@ -55,7 +55,9 @@ Open **Settings → Ruune Sync**:
 1. Paste your **Plugin token**.
 2. Click **Test connection** — you should see "connection OK ✓".
 3. Choose your **Folder** (see below), and optionally enable
-   **Include transcript** / **Include archived notes**.
+   **Include transcript** / **Include archived notes**. Turn off
+   **Keep files in the sync folder** if you file notes elsewhere and don't
+   want Ruune to put them back.
 4. Pick an **Auto-sync interval**, then click **Sync now**.
 
 ---
@@ -93,8 +95,10 @@ Leave it empty to write to the vault root.
   (`updated_at`); each run only fetches notes changed since the last one and
   advances the watermark per page, so an interrupted sync resumes cleanly.
 - **Dedup by note ID.** The plugin remembers `noteId → file path`. Re-syncing a
-  note overwrites (or moves + overwrites, if you renamed the note or changed the
-  folder) instead of creating `Title 1.md`.
+  note overwrites in place instead of creating `Title 1.md`. With **Keep files
+  in the sync folder** on (the default), a renamed note or a changed Folder
+  template also moves the file back. Turn that setting off to leave files
+  where you put them — moved or deleted notes are not recreated.
 - **One-way.** Ruune is the source of truth. Local edits to a synced file are
   overwritten the next time that note changes in Ruune. (Use "Reset sync state"
   to force a full re-import.)
